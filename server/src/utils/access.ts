@@ -212,27 +212,24 @@ const checkOtherAccess = async (access: AccessRepository, request: OtherAccessRe
     }
 
     case Permission.AssetUpdate: {
-      return await access.asset.checkOwnerAccess(auth.user.id, ids, auth.session?.hasElevatedPermission);
+      const isOwner = await access.asset.checkOwnerAccess(auth.user.id, ids, auth.session?.hasElevatedPermission);
+      const isAlbumEditor = await access.asset.checkAlbumAccess(auth.user.id, ids.difference(isOwner));
+      return isOwner.union(isAlbumEditor);
     }
 
     case Permission.AssetDelete: {
-      return await access.asset.checkOwnerAccess(auth.user.id, ids, auth.session?.hasElevatedPermission);
+      const isOwner = await access.asset.checkOwnerAccess(auth.user.id, ids, auth.session?.hasElevatedPermission);
+      const isAlbumEditor = await access.asset.checkAlbumAccess(auth.user.id, ids.difference(isOwner));
+      return isOwner.union(isAlbumEditor);
     }
 
-    case Permission.AssetCopy: {
-      return await access.asset.checkOwnerAccess(auth.user.id, ids, auth.session?.hasElevatedPermission);
-    }
-
-    case Permission.AssetEditGet: {
-      return await access.asset.checkOwnerAccess(auth.user.id, ids, auth.session?.hasElevatedPermission);
-    }
-
-    case Permission.AssetEditCreate: {
-      return await access.asset.checkOwnerAccess(auth.user.id, ids, auth.session?.hasElevatedPermission);
-    }
-
+    case Permission.AssetCopy:
+    case Permission.AssetEditGet:
+    case Permission.AssetEditCreate:
     case Permission.AssetEditDelete: {
-      return await access.asset.checkOwnerAccess(auth.user.id, ids, auth.session?.hasElevatedPermission);
+      const isOwner = await access.asset.checkOwnerAccess(auth.user.id, ids, auth.session?.hasElevatedPermission);
+      const isAlbumEditor = await access.asset.checkAlbumAccess(auth.user.id, ids.difference(isOwner));
+      return isOwner.union(isAlbumEditor);
     }
 
     case Permission.AssetFileRead:
@@ -331,11 +328,11 @@ const checkOtherAccess = async (access: AccessRepository, request: OtherAccessRe
       return access.notification.checkOwnerAccess(auth.user.id, ids);
     }
 
-    case Permission.TagAsset:
     case Permission.TagRead:
     case Permission.TagUpdate:
-    case Permission.TagDelete: {
-      return await access.tag.checkOwnerAccess(auth.user.id, ids);
+    case Permission.TagDelete:
+    case Permission.TagAsset: {
+      return ids; // Global tags: all tags accessible to all users
     }
 
     case Permission.TimelineRead: {

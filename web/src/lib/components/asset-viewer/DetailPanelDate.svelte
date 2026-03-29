@@ -1,5 +1,4 @@
 <script lang="ts">
-  import { authManager } from '#lib/managers/auth-manager.svelte.ts';
   import AssetChangeDateModal from '#lib/modals/AssetChangeDateModal.svelte';
   import { locale } from '#lib/stores/preferences.store.ts';
   import { fromISODateTime, fromISODateTimeUTC, toTimelineAsset } from '#lib/utils/timeline-util.ts';
@@ -10,9 +9,10 @@
 
   type Props = {
     asset: AssetResponseDto;
+    canEdit: boolean;
   };
 
-  const { asset }: Props = $props();
+  const { asset, canEdit }: Props = $props();
 
   const timeZone = $derived(asset.exifInfo?.timeZone ?? undefined);
   const dateTime = $derived(
@@ -20,10 +20,9 @@
       ? fromISODateTime(asset.exifInfo.dateTimeOriginal, timeZone)
       : fromISODateTimeUTC(asset.localDateTime),
   );
-  const isOwner = $derived(authManager.authenticated && asset.ownerId === authManager.user.id);
 
   const handleChangeDate = async () => {
-    if (!isOwner) {
+    if (!canEdit) {
       return;
     }
 
@@ -40,8 +39,8 @@
     type="button"
     class="flex w-full place-items-start justify-between gap-4 py-4 text-start"
     onclick={handleChangeDate}
-    title={isOwner ? $t('edit_date') : ''}
-    class:hover:text-primary={isOwner}
+    title={canEdit ? $t('edit_date') : ''}
+    class:hover:text-primary={canEdit}
     data-testid="detail-panel-edit-date-button"
   >
     <div class="flex gap-4">
@@ -68,13 +67,13 @@
       </div>
     </div>
 
-    {#if isOwner}
+    {#if canEdit}
       <div class="p-1">
         <Icon icon={mdiPencil} size="20" />
       </div>
     {/if}
   </button>
-{:else if !dateTime && isOwner}
+{:else if !dateTime && canEdit}
   <div class="flex place-items-start justify-between gap-4 py-4">
     <div class="flex gap-4">
       <Icon icon={mdiCalendar} size="24" />

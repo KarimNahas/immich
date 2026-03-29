@@ -18,6 +18,7 @@ import type { OnFavorite } from '#lib/utils/actions.ts';
 import { handleError } from '#lib/utils/handle-error.ts';
 import { getFormatter } from '#lib/utils/i18n.ts';
 import {
+  AlbumUserRole,
   AssetJobName,
   AssetMediaSize,
   AssetTypeEnum,
@@ -173,6 +174,13 @@ export const getAssetBulkActions = ($t: MessageFormatter, album?: AlbumResponseD
   };
 };
 
+/** Whether the current user is an editor of at least one of the given albums */
+export const isAlbumEditor = (albums: AlbumResponseDto[]) =>
+  authManager.authenticated &&
+  albums.some((album) =>
+    album.albumUsers.some(({ user, role }) => user.id === authManager.user.id && role === AlbumUserRole.Editor),
+  );
+
 export const getAssetActions = (
   $t: MessageFormatter,
   asset: AssetResponseDto & { stackPrimaryAssetId?: string },
@@ -239,7 +247,7 @@ export const getAssetActions = (
   const Favorite: ActionItem = {
     title: $t('to_favorite'),
     icon: mdiHeartOutline,
-    $if: () => isOwner && !asset.isFavorite,
+    $if: () => !sharedLink && !asset.isFavorite,
     onAction: () => handleFavorite(asset),
     shortcuts: [{ key: 'f' }],
   };
@@ -247,7 +255,7 @@ export const getAssetActions = (
   const Unfavorite: ActionItem = {
     title: $t('unfavorite'),
     icon: mdiHeart,
-    $if: () => isOwner && asset.isFavorite,
+    $if: () => !sharedLink && asset.isFavorite,
     onAction: () => handleUnfavorite(asset),
     shortcuts: [{ key: 'f' }],
   };
@@ -334,7 +342,6 @@ export const getAssetActions = (
     icon: mdiTune,
     $if: () =>
       !sharedLink &&
-      isOwner &&
       asset.type === AssetTypeEnum.Image &&
       !asset.livePhotoVideoId &&
       asset.exifInfo?.projectionType !== ProjectionType.EQUIRECTANGULAR &&

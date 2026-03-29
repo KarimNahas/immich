@@ -22,14 +22,9 @@ export class TagRepository {
     return this.db.selectFrom('tag').select(columns.tag).where('id', '=', id).executeTakeFirst();
   }
 
-  @GenerateSql({ params: [DummyValue.UUID, DummyValue.STRING] })
-  getByValue(userId: string, value: string) {
-    return this.db
-      .selectFrom('tag')
-      .select(columns.tag)
-      .where('userId', '=', userId)
-      .where('value', '=', value)
-      .executeTakeFirst();
+  @GenerateSql({ params: [DummyValue.STRING] })
+  getByValue(value: string) {
+    return this.db.selectFrom('tag').select(columns.tag).where('value', '=', value).executeTakeFirst();
   }
 
   @GenerateSql({ params: [DummyValue.UUID] })
@@ -48,6 +43,13 @@ export class TagRepository {
   @GenerateSql({ params: [{ userId: DummyValue.UUID, value: DummyValue.STRING, parentId: DummyValue.UUID }] })
   async upsertValue({ userId, value, parentId: _parentId }: { userId: string; value: string; parentId?: string }) {
     const parentId = _parentId ?? null;
+
+    // Global tags: reuse an existing tag with this value, regardless of which user created it
+    const existing = await this.getByValue(value);
+    if (existing) {
+      return existing;
+    }
+
     return this.insertTagWithClosures((db) =>
       db
         .insertInto('tag')
@@ -57,9 +59,9 @@ export class TagRepository {
     );
   }
 
-  @GenerateSql({ params: [DummyValue.UUID] })
-  getAll(userId: string) {
-    return this.db.selectFrom('tag').select(columns.tag).where('userId', '=', userId).orderBy('value').execute();
+  @GenerateSql()
+  getAll() {
+    return this.db.selectFrom('tag').select(columns.tag).orderBy('value').execute();
   }
 
   @GenerateSql({ params: [{ userId: DummyValue.UUID, color: DummyValue.STRING, value: DummyValue.STRING }] })

@@ -93,6 +93,8 @@ interface AssetBuilderOptions {
   visibility?: AssetVisibility;
   withCoordinates?: boolean;
   bbox?: BoundingBox;
+  /** Include assets from shared albums where this user is a member */
+  sharedAlbumUserId?: string;
 }
 
 export interface TimeBucketOptions extends AssetBuilderOptions {
@@ -791,7 +793,9 @@ export class AssetRepository {
             qb.where((eb) => {
               // TODO this should become a shared `hasAccess` style helper once implement sharing in more places
               const isOwner = eb('asset.ownerId', '=', anyUuid(options.userIds!));
-              return options.personId ? eb.or([isOwner, inSharedAlbum(auth.user.id, 'asset.id')]) : isOwner;
+              // person pages (upstream) and the viewer's own timeline (sharedAlbumUserId) also include shared album assets
+              const sharedAlbumUserId = options.sharedAlbumUserId ?? (options.personId ? auth.user.id : undefined);
+              return sharedAlbumUserId ? eb.or([isOwner, inSharedAlbum(sharedAlbumUserId, 'asset.id')]) : isOwner;
             }),
           )
           .$if(options.isFavorite !== undefined, (qb) => qb.where('asset.isFavorite', '=', options.isFavorite!))
@@ -824,7 +828,7 @@ export class AssetRepository {
             'asset.duration',
             'asset.id',
             'asset.visibility',
-            sql`asset."isFavorite" and asset."ownerId" = ${auth.user.id}`.as('isFavorite'),
+            sql`asset."isFavorite"`.as('isFavorite'),
             sql`asset.type = 'IMAGE'`.as('isImage'),
             sql`asset."deletedAt" is not null`.as('isTrashed'),
             'asset.livePhotoVideoId',
@@ -888,7 +892,9 @@ export class AssetRepository {
           .$if(!!options.userIds, (qb) =>
             qb.where((eb) => {
               const isOwner = eb('asset.ownerId', '=', anyUuid(options.userIds!));
-              return options.personId ? eb.or([isOwner, inSharedAlbum(auth.user.id, 'asset.id')]) : isOwner;
+              // person pages (upstream) and the viewer's own timeline (sharedAlbumUserId) also include shared album assets
+              const sharedAlbumUserId = options.sharedAlbumUserId ?? (options.personId ? auth.user.id : undefined);
+              return sharedAlbumUserId ? eb.or([isOwner, inSharedAlbum(sharedAlbumUserId, 'asset.id')]) : isOwner;
             }),
           )
           .$if(options.isFavorite !== undefined, (qb) => qb.where('asset.isFavorite', '=', options.isFavorite!))
@@ -977,7 +983,11 @@ export class AssetRepository {
   }
 
   @GenerateSql({ params: [DummyValue.UUID, { minAssetsPerField: 5, maxFields: 12 }] })
-  async getAssetIdByCity(ownerId: string, { minAssetsPerField, maxFields }: AssetExploreFieldOptions) {
+  async getAssetIdByCity(
+    ownerId: string,
+    { minAssetsPerField, maxFields }: AssetExploreFieldOptions,
+    sharedAlbumUserId?: string,
+  ) {
     const items = await this.db
       .with('cities', (qb) =>
         qb
@@ -993,7 +1003,23 @@ export class AssetRepository {
       .distinctOn('asset_exif.city')
       .select(['assetId as data', 'asset_exif.city as value'])
       .$narrowType<{ value: NotNull }>()
-      .where('ownerId', '=', asUuid(ownerId))
+      .$if(!sharedAlbumUserId, (qb) => qb.where('ownerId', '=', asUuid(ownerId)))
+      .$if(!!sharedAlbumUserId, (qb) =>
+        qb.where((eb) =>
+          eb.or([
+            eb('ownerId' as any, '=', asUuid(ownerId)),
+            eb.exists(
+              eb
+                .selectFrom('album_asset')
+                .innerJoin('album', 'album.id', 'album_asset.albumId')
+                .innerJoin('album_user', 'album_user.albumId', 'album.id')
+                .whereRef('album_asset.assetId', '=', 'asset.id')
+                .where('album_user.userId', '=', asUuid(sharedAlbumUserId!))
+                .where('album.deletedAt', 'is', null),
+            ),
+          ]),
+        ),
+      )
       .where('visibility', '=', AssetVisibility.Timeline)
       .where('type', '=', AssetType.Image)
       .where('deletedAt', 'is', null)

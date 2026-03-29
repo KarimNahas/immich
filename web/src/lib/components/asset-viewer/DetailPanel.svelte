@@ -12,6 +12,7 @@
   import { createPreloadedQuery } from '#lib/queries/client.ts';
   import { getPublicConfigQuery } from '#lib/queries/config-public.query.ts';
   import { Route } from '#lib/route.ts';
+  import { isAlbumEditor } from '#lib/services/asset.service.ts';
   import { faceManager } from '#lib/stores/face.svelte.ts';
   import { locale } from '#lib/stores/preferences.store.ts';
   import { getAssetMediaUrl } from '#lib/utils.ts';
@@ -60,6 +61,8 @@
     enabled: !authManager.isSharedLink,
   }));
   const albums = $derived(albumsQuery.data ?? []);
+  // the asset owner and editors of an album containing the asset can edit its metadata
+  let canEdit = $derived(isOwner || isAlbumEditor(currentAlbum ? [currentAlbum, ...albums] : albums));
 
   $effect(() => {
     if (!previousId) {
@@ -138,8 +141,8 @@
       </section>
     {/if}
 
-    <DetailPanelDescription {asset} {isOwner} />
-    <DetailPanelRating {asset} {isOwner} />
+    <DetailPanelDescription {asset} {canEdit} />
+    <DetailPanelRating {asset} {canEdit} />
     <DetailPanelPeople {asset} {isOwner} {previousRoute} />
 
     <div class="p-4">
@@ -151,7 +154,7 @@
         <Text size="small" color="muted">{$t('no_exif_info_available')}</Text>
       {/if}
 
-      <DetailPanelDate {asset} />
+      <DetailPanelDate {asset} {canEdit} />
 
       <div class="flex gap-4 py-4">
         <div><Icon icon={mdiImageOutline} size="24" /></div>
@@ -159,7 +162,7 @@
         <div>
           <p class="flex place-items-center gap-2 break-all whitespace-pre-wrap">
             {asset.originalFileName}
-            {#if isOwner}
+            {#if canEdit}
               <IconButton
                 icon={mdiInformationOutline}
                 aria-label={$t('show_file_location')}
@@ -262,7 +265,7 @@
         </div>
       {/if}
 
-      <DetailPanelLocation {isOwner} {asset} />
+      <DetailPanelLocation {canEdit} {asset} />
     </div>
   </section>
 
@@ -363,7 +366,7 @@
 
   {#if authManager.authenticated && authManager.preferences.tags.enabled}
     <section class="relative px-2 pb-12 dark:bg-immich-dark-bg dark:text-immich-dark-fg">
-      <DetailPanelTags {asset} {isOwner} />
+      <DetailPanelTags {asset} {canEdit} />
     </section>
   {/if}
 {/if}

@@ -10,9 +10,10 @@
   import { assetViewerManager } from '#lib/managers/asset-viewer-manager.svelte.ts';
   import { authManager } from '#lib/managers/auth-manager.svelte.ts';
   import { languageManager } from '#lib/managers/language-manager.svelte.ts';
+  import { getAlbumsByAssetQuery } from '#lib/queries/album.query.ts';
   import { getAlbumAssetActions } from '#lib/services/album.service.ts';
   import { getGlobalActions } from '#lib/services/app.service.ts';
-  import { getAssetActions } from '#lib/services/asset.service.ts';
+  import { getAssetActions, isAlbumEditor } from '#lib/services/asset.service.ts';
   import { getPersonAssetActions } from '#lib/services/person.service.ts';
   import { getStackActions } from '#lib/services/stack.service.ts';
   import { getSharedLink, withoutIcons } from '#lib/utils.ts';
@@ -28,6 +29,7 @@
   } from '@immich/sdk';
   import { ActionButton, CommandPaletteDefaultProvider, Tooltip, type ActionItem } from '@immich/ui';
   import { mdiArrowLeft, mdiArrowRight, mdiDotsVertical, mdiVideoOutline } from '@mdi/js';
+  import { createQuery } from '@tanstack/svelte-query';
   import { t } from 'svelte-i18n';
 
   interface Props {
@@ -58,6 +60,14 @@
 
   const isOwner = $derived(authManager.authenticated && asset.ownerId === authManager.user.id);
   const isLocked = $derived(asset.visibility === AssetVisibility.Locked);
+
+  // outside of an album view, look up the asset's albums to see whether the user is an editor of one of them
+  const albumsQuery = createQuery(() => ({
+    ...getAlbumsByAssetQuery(asset.id),
+    enabled: authManager.authenticated && !authManager.isSharedLink && !album && !isOwner,
+  }));
+  // the asset owner and editors of an album containing the asset can edit it
+  const canEdit = $derived(isOwner || isAlbumEditor(album ? [album] : (albumsQuery.data ?? [])));
 
   const { Cast } = $derived(getGlobalActions($t));
 
@@ -118,7 +128,7 @@
     <ActionButton action={Actions.Unfavorite} />
     <ActionButton action={Actions.Edit} />
 
-    {#if isOwner}
+    {#if canEdit}
       <DeleteAction {asset} {onAction} {preAction} {onUndoDelete} />
     {/if}
 
@@ -153,19 +163,19 @@
 
         <ActionMenuItem action={Actions.SetProfilePicture} />
 
-        {#if isOwner && !isLocked}
+        {#if canEdit && !isLocked}
           <ArchiveAction {asset} {onAction} {preAction} />
         {/if}
         <ActionMenuItem action={Actions.ViewInTimeline} />
         <ActionMenuItem action={Actions.ViewSimilar} />
 
-        {#if !asset.isTrashed && isOwner}
+        {#if !asset.isTrashed && canEdit}
           <SetVisibilityAction asset={toTimelineAsset(asset)} {onAction} {preAction} />
         {/if}
 
         <ActionMenuItem action={PlayOriginalVideo} />
 
-        {#if isOwner}
+        {#if canEdit}
           <hr />
           <ActionMenuItem action={Actions.RefreshFacesJob} />
           <ActionMenuItem action={Actions.RefreshMetadataJob} />
