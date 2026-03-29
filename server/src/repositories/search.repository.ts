@@ -557,6 +557,6 @@ export class SearchRepository {
       .where('visibility', '=', AssetVisibility.Timeline)
       .where('deletedAt', 'is', null)
       .where(field, 'is not', null)
-      .where(field, '!=', '');
+      .where(sql<boolean>`${sql.ref(field)} != ''`);
   }
 }
