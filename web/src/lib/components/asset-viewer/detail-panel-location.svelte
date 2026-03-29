@@ -8,11 +8,11 @@
   import { t } from 'svelte-i18n';
 
   interface Props {
-    isOwner: boolean;
+    canEdit: boolean;
     asset: AssetResponseDto;
   }
 
-  let { isOwner, asset = $bindable() }: Props = $props();
+  let { canEdit, asset = $bindable() }: Props = $props();
 
   let isShowChangeLocation = $state(false);
 
@@ -38,9 +38,9 @@
   <button
     type="button"
     class="flex w-full text-start justify-between place-items-start gap-4 py-4"
-    onclick={() => (isOwner ? (isShowChangeLocation = true) : null)}
-    title={isOwner ? $t('edit_location') : ''}
-    class:hover:text-primary={isOwner}
+    onclick={() => (canEdit ? (isShowChangeLocation = true) : null)}
+    title={canEdit ? $t('edit_location') : ''}
+    class:hover:text-primary={canEdit}
   >
     <div class="flex gap-4">
       <div><Icon icon={mdiMapMarkerOutline} size="24" /></div>
@@ -62,13 +62,13 @@
       </div>
     </div>
 
-    {#if isOwner}
+    {#if canEdit}
       <div>
         <Icon icon={mdiPencil} size="20" />
       </div>
     {/if}
   </button>
-{:else if !asset.exifInfo?.city && isOwner}
+{:else if !asset.exifInfo?.city && canEdit}
   <button
     type="button"
     class="flex w-full text-start justify-between place-items-start gap-4 py-4 rounded-lg hover:text-primary"

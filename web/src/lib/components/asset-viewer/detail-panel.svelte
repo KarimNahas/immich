@@ -14,13 +14,14 @@
   import { boundingBoxesArray } from '$lib/stores/people.store';
   import { locale } from '$lib/stores/preferences.store';
   import { preferences, user } from '$lib/stores/user.store';
-  import { getAssetMediaUrl, getPeopleThumbnailUrl } from '$lib/utils';
+  import { getAssetMediaUrl, getPeopleThumbnailUrl, handlePromiseError } from '$lib/utils';
   import { delay, getDimensions } from '$lib/utils/asset-utils';
   import { getByteUnitString } from '$lib/utils/byte-units';
   import { handleError } from '$lib/utils/handle-error';
   import { fromISODateTime, fromISODateTimeUTC, toTimelineAsset } from '$lib/utils/timeline-util';
   import { getParentPath } from '$lib/utils/tree-utils';
   import {
+    AlbumUserRole,
     AssetMediaSize,
     getAllAlbums,
     getAssetInfo,
@@ -59,6 +60,18 @@
   let showAssetPath = $state(false);
   let showEditFaces = $state(false);
   let isOwner = $derived($user?.id === asset.ownerId);
+  let resolvedAlbums: AlbumResponseDto[] = $state([]);
+
+  const isEditorInAlbums = (albums: AlbumResponseDto[]) =>
+    albums.some(
+      (a) => a.albumUsers?.some((au) => au.user.id === $user?.id && au.role === AlbumUserRole.Editor) ?? false,
+    );
+
+  let canEdit = $derived(
+    isOwner ||
+    (currentAlbum ? isEditorInAlbums([currentAlbum]) : false) ||
+    isEditorInAlbums(resolvedAlbums),
+  );
   let people = $derived(asset.people || []);
   let unassignedFaces = $derived(asset.unassignedFaces || []);
   let showingHiddenPeople = $state(false);
@@ -94,7 +107,15 @@
     }
   };
 
-  let albums = $derived(refreshAlbums());
+  $effect(() => {
+    // Re-run when asset.id changes
+    void asset.id;
+    handlePromiseError(
+      refreshAlbums().then((albums) => {
+        resolvedAlbums = albums;
+      }),
+    );
+  });
 
   $effect(() => {
     if (!previousId) {
@@ -133,7 +154,7 @@
   const toggleAssetPath = () => (showAssetPath = !showAssetPath);
 
   const handleChangeDate = async () => {
-    if (!isOwner) {
+    if (!canEdit) {
       return;
     }
 
@@ -182,10 +203,10 @@
     </section>
   {/if}
 
-  <DetailPanelDescription {asset} {isOwner} />
-  <DetailPanelRating {asset} {isOwner} />
+  <DetailPanelDescription {asset} canEdit={canEdit} />
+  <DetailPanelRating {asset} canEdit={canEdit} />
 
-  {#if !authManager.isSharedLink && isOwner}
+  {#if !authManager.isSharedLink}
     <section class="px-4 pt-4 text-sm">
       <div class="flex h-10 w-full items-center justify-between">
         <Text size="small" color="muted">{$t('people')}</Text>
@@ -298,8 +319,8 @@
         type="button"
         class="flex w-full text-start justify-between place-items-start gap-4 py-4"
         onclick={handleChangeDate}
-        title={isOwner ? $t('edit_date') : ''}
-        class:hover:text-primary={isOwner}
+        title={canEdit ? $t('edit_date') : ''}
+        class:hover:text-primary={canEdit}
       >
         <div class="flex gap-4">
           <div>
@@ -334,13 +355,13 @@
           </div>
         </div>
 
-        {#if isOwner}
+        {#if canEdit}
           <div class="p-1">
             <Icon icon={mdiPencil} size="20" />
           </div>
         {/if}
       </button>
-    {:else if !dateTime && isOwner}
+    {:else if !dateTime && canEdit}
       <div class="flex justify-between place-items-start gap-4 py-4">
         <div class="flex gap-4">
           <div>
@@ -359,7 +380,7 @@
       <div>
         <p class="break-all flex place-items-center gap-2 whitespace-pre-wrap">
           {asset.originalFileName}
-          {#if isOwner}
+          {#if canEdit}
             <IconButton
               icon={mdiInformationOutline}
               aria-label={$t('show_file_location')}
@@ -462,7 +483,7 @@
       </div>
     {/if}
 
-    <DetailPanelLocation {isOwner} {asset} />
+    <DetailPanelLocation canEdit={canEdit} {asset} />
   </div>
 </section>
 
@@ -530,43 +551,41 @@
   </section>
 {/if}
 
-{#await albums then albums}
-  {#if albums.length > 0}
-    <section class="px-6 py-6 dark:text-immich-dark-fg">
-      <div class="pb-4">
-        <Text size="small" color="muted">{$t('appears_in')}</Text>
-      </div>
-      {#each albums as album (album.id)}
-        <a href={Route.viewAlbum(album)}>
-          <div class="flex gap-4 pt-2 hover:cursor-pointer items-center">
-            <div>
-              <img
-                alt={album.albumName}
-                class="h-12.5 w-12.5 rounded object-cover"
-                src={album.albumThumbnailAssetId &&
-                  getAssetMediaUrl({ id: album.albumThumbnailAssetId, size: AssetMediaSize.Preview })}
-                draggable="false"
-              />
-            </div>
+{#if resolvedAlbums.length > 0}
+  <section class="px-6 py-6 dark:text-immich-dark-fg">
+    <div class="pb-4">
+      <Text size="small" color="muted">{$t('appears_in')}</Text>
+    </div>
+    {#each resolvedAlbums as album (album.id)}
+      <a href={Route.viewAlbum(album)}>
+        <div class="flex gap-4 pt-2 hover:cursor-pointer items-center">
+          <div>
+            <img
+              alt={album.albumName}
+              class="h-12.5 w-12.5 rounded object-cover"
+              src={album.albumThumbnailAssetId &&
+                getAssetMediaUrl({ id: album.albumThumbnailAssetId, size: AssetMediaSize.Preview })}
+              draggable="false"
+            />
+          </div>
 
-            <div class="mb-auto mt-auto">
-              <p class="dark:text-immich-dark-primary">{album.albumName}</p>
-              <div class="flex flex-col gap-0 text-sm">
-                <div>
-                  <AlbumListItemDetails {album} />
-                </div>
+          <div class="mb-auto mt-auto">
+            <p class="dark:text-immich-dark-primary">{album.albumName}</p>
+            <div class="flex flex-col gap-0 text-sm">
+              <div>
+                <AlbumListItemDetails {album} />
               </div>
             </div>
           </div>
-        </a>
-      {/each}
-    </section>
-  {/if}
-{/await}
+        </div>
+      </a>
+    {/each}
+  </section>
+{/if}
 
 {#if $preferences?.tags?.enabled}
   <section class="relative px-2 pb-12 dark:bg-immich-dark-bg dark:text-immich-dark-fg">
-    <DetailPanelTags {asset} {isOwner} />
+    <DetailPanelTags {asset} canEdit={canEdit} />
   </section>
 {/if}
 

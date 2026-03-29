@@ -153,7 +153,7 @@ export const getAssetActions = ($t: MessageFormatter, asset: AssetResponseDto) =
     title: $t('to_favorite'),
     icon: mdiHeartOutline,
     type: $t('assets'),
-    $if: () => isOwner && !asset.isFavorite,
+    $if: () => !sharedLink && !asset.isFavorite,
     onAction: () => handleFavorite(asset),
     shortcuts: [{ key: 'f' }],
   };
@@ -162,7 +162,7 @@ export const getAssetActions = ($t: MessageFormatter, asset: AssetResponseDto) =
     title: $t('unfavorite'),
     icon: mdiHeart,
     type: $t('assets'),
-    $if: () => isOwner && asset.isFavorite,
+    $if: () => !sharedLink && asset.isFavorite,
     onAction: () => handleUnfavorite(asset),
     shortcuts: [{ key: 'f' }],
   };
@@ -228,7 +228,6 @@ export const getAssetActions = ($t: MessageFormatter, asset: AssetResponseDto) =
     icon: mdiTune,
     $if: () =>
       !sharedLink &&
-      isOwner &&
       asset.type === AssetTypeEnum.Image &&
       !asset.livePhotoVideoId &&
       asset.exifInfo?.projectionType !== ProjectionType.EQUIRECTANGULAR &&

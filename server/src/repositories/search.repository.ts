@@ -8,7 +8,7 @@ import { AssetStatus, AssetType, AssetVisibility, VectorIndex } from 'src/enum';
 import { probes } from 'src/repositories/database.repository';
 import { DB } from 'src/schema';
 import { AssetExifTable } from 'src/schema/tables/asset-exif.table';
-import { anyUuid, searchAssetBuilder, withExif } from 'src/utils/database';
+import { anyUuid, asUuid, searchAssetBuilder, withExif } from 'src/utils/database';
 import { paginationHelper } from 'src/utils/pagination';
 import { isValidInteger } from 'src/validation';
 
@@ -22,6 +22,7 @@ export interface SearchUserIdOptions {
   deviceId?: string;
   libraryId?: string | null;
   userIds?: string[];
+  sharedAlbumUserId?: string;
 }
 
 export type SearchIdOptions = SearchAssetIdOptions & SearchUserIdOptions;
@@ -344,7 +345,7 @@ export class SearchRepository {
             .innerJoin('asset', 'asset.id', 'asset_face.assetId')
             .innerJoin('face_search', 'face_search.faceId', 'asset_face.id')
             .leftJoin('person', 'person.id', 'asset_face.personId')
-            .where('asset.ownerId', '=', anyUuid(userIds))
+            .$if(userIds.length > 0, (qb) => qb.where('asset.ownerId', '=', anyUuid(userIds)))
             .where('asset.deletedAt', 'is', null)
             .$if(!!hasPerson, (qb) => qb.where('asset_face.personId', 'is not', null))
             .$if(!!minBirthDate, (qb) =>
@@ -390,14 +391,35 @@ export class SearchRepository {
   }
 
   @GenerateSql({ params: [[DummyValue.UUID]] })
-  getAssetsByCity(userIds: string[]) {
+  getAssetsByCity(userIds: string[], sharedAlbumUserId?: string) {
+    const ownerFilter = <O>(qb: any) => {
+      if (sharedAlbumUserId) {
+        return qb.where((eb: any) =>
+          eb.or([
+            eb('asset.ownerId', '=', anyUuid(userIds)),
+            eb.exists(
+              eb
+                .selectFrom('album_asset')
+                .innerJoin('album', 'album.id', 'album_asset.albumId')
+                .innerJoin('album_user', 'album_user.albumId', 'album.id')
+                .whereRef('album_asset.assetId', '=', 'asset.id')
+                .where('album_user.userId', '=', asUuid(sharedAlbumUserId))
+                .where('album.deletedAt', 'is', null),
+            ),
+          ]),
+        );
+      }
+      return qb.where('asset.ownerId', '=', anyUuid(userIds));
+    };
+
     return this.db
       .withRecursive('cte', (qb) => {
-        const base = qb
-          .selectFrom('asset_exif')
-          .select(['city', 'assetId'])
-          .innerJoin('asset', 'asset.id', 'asset_exif.assetId')
-          .where('asset.ownerId', '=', anyUuid(userIds))
+        const base = ownerFilter(
+          qb
+            .selectFrom('asset_exif')
+            .select(['city', 'assetId'])
+            .innerJoin('asset', 'asset.id', 'asset_exif.assetId'),
+        )
           .where('asset.visibility', '=', AssetVisibility.Timeline)
           .where('asset.type', '=', AssetType.Image)
           .where('asset.deletedAt', 'is', null)
@@ -408,20 +430,23 @@ export class SearchRepository {
           .selectFrom('cte')
           .select(['l.city', 'l.assetId'])
           .innerJoinLateral(
-            (qb) =>
-              qb
-                .selectFrom('asset_exif')
-                .select(['city', 'assetId'])
-                .innerJoin('asset', 'asset.id', 'asset_exif.assetId')
-                .where('asset.ownerId', '=', anyUuid(userIds))
+            (qb: any) => {
+              const inner = ownerFilter(
+                qb
+                  .selectFrom('asset_exif')
+                  .select(['city', 'assetId'])
+                  .innerJoin('asset', 'asset.id', 'asset_exif.assetId'),
+              );
+              return inner
                 .where('asset.visibility', '=', AssetVisibility.Timeline)
                 .where('asset.type', '=', AssetType.Image)
                 .where('asset.deletedAt', 'is', null)
                 .whereRef('asset_exif.city', '>', 'cte.city')
                 .orderBy('city')
                 .limit(1)
-                .as('l'),
-            (join) => join.onTrue(),
+                .as('l');
+            },
+            (join: any) => join.onTrue(),
           );
 
         return sql<{ city: string; assetId: string }>`(${base} union all ${recursive})`;
@@ -448,14 +473,14 @@ export class SearchRepository {
       .execute();
   }
 
-  async getCountries(userIds: string[]): Promise<string[]> {
-    const res = await this.getExifField('country', userIds).execute();
+  async getCountries(userIds: string[], sharedAlbumUserId?: string): Promise<string[]> {
+    const res = await this.getExifField('country', userIds, sharedAlbumUserId).execute();
     return res.map((row) => row.country!);
   }
 
   @GenerateSql({ params: [[DummyValue.UUID], DummyValue.STRING] })
-  async getStates(userIds: string[], { country }: GetStatesOptions): Promise<string[]> {
-    const res = await this.getExifField('state', userIds)
+  async getStates(userIds: string[], sharedAlbumUserId: string | undefined, { country }: GetStatesOptions): Promise<string[]> {
+    const res = await this.getExifField('state', userIds, sharedAlbumUserId)
       .$if(!!country, (qb) => qb.where('country', '=', country!))
       .execute();
 
@@ -463,8 +488,8 @@ export class SearchRepository {
   }
 
   @GenerateSql({ params: [[DummyValue.UUID], DummyValue.STRING, DummyValue.STRING] })
-  async getCities(userIds: string[], { country, state }: GetCitiesOptions): Promise<string[]> {
-    const res = await this.getExifField('city', userIds)
+  async getCities(userIds: string[], sharedAlbumUserId: string | undefined, { country, state }: GetCitiesOptions): Promise<string[]> {
+    const res = await this.getExifField('city', userIds, sharedAlbumUserId)
       .$if(!!country, (qb) => qb.where('country', '=', country!))
       .$if(!!state, (qb) => qb.where('state', '=', state!))
       .execute();
@@ -473,8 +498,8 @@ export class SearchRepository {
   }
 
   @GenerateSql({ params: [[DummyValue.UUID], DummyValue.STRING, DummyValue.STRING] })
-  async getCameraMakes(userIds: string[], { model, lensModel }: GetCameraMakesOptions): Promise<string[]> {
-    const res = await this.getExifField('make', userIds)
+  async getCameraMakes(userIds: string[], sharedAlbumUserId: string | undefined, { model, lensModel }: GetCameraMakesOptions): Promise<string[]> {
+    const res = await this.getExifField('make', userIds, sharedAlbumUserId)
       .$if(!!model, (qb) => qb.where('model', '=', model!))
       .$if(!!lensModel, (qb) => qb.where('lensModel', '=', lensModel!))
       .execute();
@@ -483,8 +508,8 @@ export class SearchRepository {
   }
 
   @GenerateSql({ params: [[DummyValue.UUID], DummyValue.STRING, DummyValue.STRING] })
-  async getCameraModels(userIds: string[], { make, lensModel }: GetCameraModelsOptions): Promise<string[]> {
-    const res = await this.getExifField('model', userIds)
+  async getCameraModels(userIds: string[], sharedAlbumUserId: string | undefined, { make, lensModel }: GetCameraModelsOptions): Promise<string[]> {
+    const res = await this.getExifField('model', userIds, sharedAlbumUserId)
       .$if(!!make, (qb) => qb.where('make', '=', make!))
       .$if(!!lensModel, (qb) => qb.where('lensModel', '=', lensModel!))
       .execute();
@@ -493,8 +518,8 @@ export class SearchRepository {
   }
 
   @GenerateSql({ params: [[DummyValue.UUID], DummyValue.STRING] })
-  async getCameraLensModels(userIds: string[], { make, model }: GetCameraLensModelsOptions): Promise<string[]> {
-    const res = await this.getExifField('lensModel', userIds)
+  async getCameraLensModels(userIds: string[], sharedAlbumUserId: string | undefined, { make, model }: GetCameraLensModelsOptions): Promise<string[]> {
+    const res = await this.getExifField('lensModel', userIds, sharedAlbumUserId)
       .$if(!!make, (qb) => qb.where('make', '=', make!))
       .$if(!!model, (qb) => qb.where('model', '=', model!))
       .execute();
@@ -505,13 +530,30 @@ export class SearchRepository {
   private getExifField<K extends 'city' | 'state' | 'country' | 'make' | 'model' | 'lensModel'>(
     field: K,
     userIds: string[],
+    sharedAlbumUserId?: string,
   ) {
     return this.db
       .selectFrom('asset_exif')
       .select(field)
       .distinctOn(field)
       .innerJoin('asset', 'asset.id', 'asset_exif.assetId')
-      .where('ownerId', '=', anyUuid(userIds))
+      .$if(!sharedAlbumUserId, (qb) => qb.where('ownerId', '=', anyUuid(userIds)))
+      .$if(!!sharedAlbumUserId, (qb) =>
+        qb.where((eb) =>
+          eb.or([
+            eb('ownerId' as any, '=', anyUuid(userIds)),
+            eb.exists(
+              eb
+                .selectFrom('album_asset')
+                .innerJoin('album', 'album.id', 'album_asset.albumId')
+                .innerJoin('album_user', 'album_user.albumId', 'album.id')
+                .whereRef('album_asset.assetId', '=', 'asset.id')
+                .where('album_user.userId', '=', asUuid(sharedAlbumUserId!))
+                .where('album.deletedAt', 'is', null),
+            ),
+          ]),
+        ),
+      )
       .where('visibility', '=', AssetVisibility.Timeline)
       .where('deletedAt', 'is', null)
       .where(field, 'is not', null);

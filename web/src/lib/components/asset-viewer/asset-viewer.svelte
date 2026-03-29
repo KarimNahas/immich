@@ -145,6 +145,13 @@
   onMount(() => {
     syncAssetViewerOpenClass(true);
     unsubscribes.push(
+      eventManager.on({
+        AssetUpdate: (updatedAsset) => {
+          if (updatedAsset.id === asset.id) {
+            cursor.current = updatedAsset;
+          }
+        },
+      }),
       slideshowState.subscribe((value) => {
         if (value === SlideshowState.PlaySlideshow) {
           slideshowHistory.reset();

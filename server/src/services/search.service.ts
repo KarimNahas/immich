@@ -40,7 +40,7 @@ export class SearchService extends BaseService {
 
   async getExploreData(auth: AuthDto) {
     const options = { maxFields: 12, minAssetsPerField: 5 };
-    const cities = await this.assetRepository.getAssetIdByCity(auth.user.id, options);
+    const cities = await this.assetRepository.getAssetIdByCity(auth.user.id, options, auth.user.id);
     const assets = await this.assetRepository.getByIdsWithAllRelationsButStacks(cities.items.map(({ data }) => data));
     const items = assets.map((asset) => ({ value: asset.exifInfo!.city!, data: mapAsset(asset, { auth }) }));
     return [{ fieldName: cities.fieldName, items }];
@@ -59,13 +59,14 @@ export class SearchService extends BaseService {
 
     const page = dto.page ?? 1;
     const size = dto.size || 250;
-    const userIds = await this.getUserIdsToSearch(auth);
+    const { userIds, sharedAlbumUserId } = await this.getUserIdsToSearch(auth);
     const { hasNextPage, items } = await this.searchRepository.searchMetadata(
       { page, size },
       {
         ...dto,
         checksum,
         userIds,
+        sharedAlbumUserId,
         orderDirection: dto.order ?? AssetOrder.Desc,
       },
     );
@@ -74,11 +75,12 @@ export class SearchService extends BaseService {
   }
 
   async searchStatistics(auth: AuthDto, dto: StatisticsSearchDto): Promise<SearchStatisticsResponseDto> {
-    const userIds = await this.getUserIdsToSearch(auth);
+    const { userIds, sharedAlbumUserId } = await this.getUserIdsToSearch(auth);
 
     return await this.searchRepository.searchStatistics({
       ...dto,
       userIds,
+      sharedAlbumUserId,
     });
   }
 
@@ -87,8 +89,8 @@ export class SearchService extends BaseService {
       requireElevatedPermission(auth);
     }
 
-    const userIds = await this.getUserIdsToSearch(auth);
-    const items = await this.searchRepository.searchRandom(dto.size || 250, { ...dto, userIds });
+    const { userIds, sharedAlbumUserId } = await this.getUserIdsToSearch(auth);
+    const items = await this.searchRepository.searchRandom(dto.size || 250, { ...dto, userIds, sharedAlbumUserId });
     return items.map((item) => mapAsset(item, { auth }));
   }
 
@@ -97,8 +99,8 @@ export class SearchService extends BaseService {
       requireElevatedPermission(auth);
     }
 
-    const userIds = await this.getUserIdsToSearch(auth);
-    const items = await this.searchRepository.searchLargeAssets(dto.size || 250, { ...dto, userIds });
+    const { userIds, sharedAlbumUserId } = await this.getUserIdsToSearch(auth);
+    const items = await this.searchRepository.searchLargeAssets(dto.size || 250, { ...dto, userIds, sharedAlbumUserId });
     return items.map((item) => mapAsset(item, { auth }));
   }
 
@@ -112,7 +114,7 @@ export class SearchService extends BaseService {
       throw new BadRequestException('Smart search is not enabled');
     }
 
-    const userIds = this.getUserIdsToSearch(auth);
+    const searchScope = this.getUserIdsToSearch(auth);
     let embedding;
     if (dto.query) {
       const key = machineLearning.clip.modelName + dto.query + dto.language;
@@ -137,48 +139,53 @@ export class SearchService extends BaseService {
     }
     const page = dto.page ?? 1;
     const size = dto.size || 100;
+    const { userIds, sharedAlbumUserId } = await searchScope;
     const { hasNextPage, items } = await this.searchRepository.searchSmart(
       { page, size },
-      { ...dto, userIds: await userIds, embedding },
+      { ...dto, userIds, sharedAlbumUserId, embedding },
     );
 
     return this.mapResponse(items, hasNextPage ? (page + 1).toString() : null, { auth });
   }
 
   async getAssetsByCity(auth: AuthDto): Promise<AssetResponseDto[]> {
-    const userIds = await this.getUserIdsToSearch(auth);
-    const assets = await this.searchRepository.getAssetsByCity(userIds);
+    const { userIds, sharedAlbumUserId } = await this.getUserIdsToSearch(auth);
+    const assets = await this.searchRepository.getAssetsByCity(userIds, sharedAlbumUserId);
     return assets.map((asset) => mapAsset(asset));
   }
 
   async getSearchSuggestions(auth: AuthDto, dto: SearchSuggestionRequestDto) {
-    const userIds = await this.getUserIdsToSearch(auth);
-    const suggestions = await this.getSuggestions(userIds, dto);
+    const { userIds, sharedAlbumUserId } = await this.getUserIdsToSearch(auth);
+    const suggestions = await this.getSuggestions(userIds, sharedAlbumUserId, dto);
     if (dto.includeNull) {
       suggestions.push(null);
     }
     return suggestions;
   }
 
-  private getSuggestions(userIds: string[], dto: SearchSuggestionRequestDto): Promise<Array<string | null>> {
+  private getSuggestions(
+    userIds: string[],
+    sharedAlbumUserId: string | undefined,
+    dto: SearchSuggestionRequestDto,
+  ): Promise<Array<string | null>> {
     switch (dto.type) {
       case SearchSuggestionType.COUNTRY: {
-        return this.searchRepository.getCountries(userIds);
+        return this.searchRepository.getCountries(userIds, sharedAlbumUserId);
       }
       case SearchSuggestionType.STATE: {
-        return this.searchRepository.getStates(userIds, dto);
+        return this.searchRepository.getStates(userIds, sharedAlbumUserId, dto);
       }
       case SearchSuggestionType.CITY: {
-        return this.searchRepository.getCities(userIds, dto);
+        return this.searchRepository.getCities(userIds, sharedAlbumUserId, dto);
       }
       case SearchSuggestionType.CAMERA_MAKE: {
-        return this.searchRepository.getCameraMakes(userIds, dto);
+        return this.searchRepository.getCameraMakes(userIds, sharedAlbumUserId, dto);
       }
       case SearchSuggestionType.CAMERA_MODEL: {
-        return this.searchRepository.getCameraModels(userIds, dto);
+        return this.searchRepository.getCameraModels(userIds, sharedAlbumUserId, dto);
       }
       case SearchSuggestionType.CAMERA_LENS_MODEL: {
-        return this.searchRepository.getCameraLensModels(userIds, dto);
+        return this.searchRepository.getCameraLensModels(userIds, sharedAlbumUserId, dto);
       }
       default: {
         return Promise.resolve([]);
@@ -186,13 +193,16 @@ export class SearchService extends BaseService {
     }
   }
 
-  private async getUserIdsToSearch(auth: AuthDto): Promise<string[]> {
+  private async getUserIdsToSearch(auth: AuthDto): Promise<{ userIds: string[]; sharedAlbumUserId: string }> {
     const partnerIds = await getMyPartnerIds({
       userId: auth.user.id,
       repository: this.partnerRepository,
       timelineEnabled: true,
     });
-    return [auth.user.id, ...partnerIds];
+    return {
+      userIds: [auth.user.id, ...partnerIds],
+      sharedAlbumUserId: auth.user.id,
+    };
   }
 
   private mapResponse(assets: MapAsset[], nextPage: string | null, options: AssetMapOptions): SearchResponseDto {

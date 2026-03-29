@@ -420,6 +420,49 @@ class PersonAccess {
       .execute()
       .then((faces) => new Set(faces.map((face) => face.id)));
   }
+
+  @GenerateSql({ params: [DummyValue.UUID, DummyValue.UUID_SET] })
+  @ChunkedSet({ paramIndex: 1 })
+  async checkSharedAlbumPersonAccess(userId: string, personIds: Set<string>) {
+    if (personIds.size === 0) {
+      return new Set<string>();
+    }
+
+    return this.db
+      .selectFrom('person')
+      .select('person.id')
+      .innerJoin('asset_face', 'asset_face.personId', 'person.id')
+      .innerJoin('album_asset', 'album_asset.assetId', 'asset_face.assetId')
+      .innerJoin('album', (join) => join.onRef('album.id', '=', 'album_asset.albumId').on('album.deletedAt', 'is', null))
+      .innerJoin('album_user', 'album_user.albumId', 'album.id')
+      .where('person.id', 'in', [...personIds])
+      .where('album_user.userId', '=', userId)
+      .execute()
+      .then((persons) => new Set(persons.map((person) => person.id)));
+  }
+
+  @GenerateSql({ params: [DummyValue.UUID, DummyValue.UUID_SET] })
+  @ChunkedSet({ paramIndex: 1 })
+  async checkFaceAlbumAccess(userId: string, assetFaceIds: Set<string>) {
+    if (assetFaceIds.size === 0) {
+      return new Set<string>();
+    }
+
+    return this.db
+      .selectFrom('asset_face')
+      .select('asset_face.id')
+      .innerJoin('asset', (join) =>
+        join.onRef('asset.id', '=', 'asset_face.assetId').on('asset.deletedAt', 'is', null),
+      )
+      .innerJoin('album_asset', 'album_asset.assetId', 'asset.id')
+      .innerJoin('album', (join) => join.onRef('album.id', '=', 'album_asset.albumId').on('album.deletedAt', 'is', null))
+      .innerJoin('album_user', 'album_user.albumId', 'album.id')
+      .where('asset_face.id', 'in', [...assetFaceIds])
+      .where('album_user.userId', '=', userId)
+      .where('album_user.role', '=', AlbumUserRole.Editor)
+      .execute()
+      .then((faces) => new Set(faces.map((face) => face.id)));
+  }
 }
 
 class PartnerAccess {
