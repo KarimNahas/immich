@@ -16,6 +16,8 @@ export interface PersonSearchOptions {
   minimumFaceCount: number;
   withHidden: boolean;
   closestFaceAssetId?: string;
+  /** Include persons from assets in shared albums where this user is a member */
+  withSharedAlbumPersons?: boolean;
 }
 
 export interface PersonNameSearchOptions {
@@ -160,7 +162,7 @@ export class PersonRepository {
           .on('asset.visibility', '=', sql.lit(AssetVisibility.Timeline))
           .on('asset.deletedAt', 'is', null),
       )
-      .where('person.ownerId', '=', userId)
+      // Global people: all persons visible to all users
       .where('asset_face.deletedAt', 'is', null)
       .where('asset_face.isVisible', 'is', true)
       .orderBy('person.isHidden', 'asc')
@@ -321,12 +323,9 @@ export class PersonRepository {
       .selectFrom('person')
       .selectAll('person')
       .where((eb) =>
-        eb.and([
-          eb('person.ownerId', '=', userId),
-          eb.or([
-            eb(eb.fn('lower', ['person.name']), 'like', `${personName.toLowerCase()}%`),
-            eb(eb.fn('lower', ['person.name']), 'like', `% ${personName.toLowerCase()}%`),
-          ]),
+        eb.or([
+          eb(eb.fn('lower', ['person.name']), 'like', `${personName.toLowerCase()}%`),
+          eb(eb.fn('lower', ['person.name']), 'like', `% ${personName.toLowerCase()}%`),
         ]),
       )
       .limit(1000)
@@ -340,7 +339,7 @@ export class PersonRepository {
       .selectFrom('person')
       .select(['person.id', 'person.name'])
       .distinctOn((eb) => eb.fn('lower', ['person.name']))
-      .where((eb) => eb.and([eb('person.ownerId', '=', userId), eb('person.name', '!=', '')]))
+      .where('person.name', '!=', '')
       .$if(!withHidden, (qb) => qb.where('person.isHidden', '=', false))
       .execute();
   }
@@ -389,7 +388,7 @@ export class PersonRepository {
             ),
         ),
       )
-      .where('person.ownerId', '=', userId)
+      // Global people: count all persons
       .select((eb) => eb.fn.coalesce(eb.fn.countAll<number>(), zero).as('total'))
       .select((eb) => eb.fn.coalesce(eb.fn.countAll<number>().filterWhere('isHidden', '=', true), zero).as('hidden'))
       .executeTakeFirstOrThrow();

@@ -355,6 +355,38 @@ export function searchAssetBuilder(kysely: Kysely<DB>, options: AssetSearchBuild
     .$if(!!options.id, (qb) => qb.where('asset.id', '=', asUuid(options.id!)))
     .$if(!!options.libraryId, (qb) => qb.where('asset.libraryId', '=', asUuid(options.libraryId!)))
     .$if(!!options.userIds, (qb) => qb.where('asset.ownerId', '=', anyUuid(options.userIds!)))
+    .$if(!!options.userIds && !options.sharedAlbumUserId, (qb) =>
+      qb.where('asset.ownerId', '=', anyUuid(options.userIds!)),
+    )
+    .$if(!!options.userIds && !!options.sharedAlbumUserId, (qb) =>
+      qb.where((eb) =>
+        eb.or([
+          eb('asset.ownerId', '=', anyUuid(options.userIds!)),
+          eb.exists(
+            eb
+              .selectFrom('album_asset')
+              .innerJoin('album', 'album.id', 'album_asset.albumId')
+              .innerJoin('album_user', 'album_user.albumId', 'album.id')
+              .whereRef('album_asset.assetId', '=', 'asset.id')
+              .where('album_user.userId', '=', asUuid(options.sharedAlbumUserId!))
+              .where('album.deletedAt', 'is', null),
+          ),
+        ]),
+      ),
+    )
+    .$if(!options.userIds && !!options.sharedAlbumUserId, (qb) =>
+      qb.where((eb) =>
+        eb.exists(
+          eb
+            .selectFrom('album_asset')
+            .innerJoin('album', 'album.id', 'album_asset.albumId')
+            .innerJoin('album_user', 'album_user.albumId', 'album.id')
+            .whereRef('album_asset.assetId', '=', 'asset.id')
+            .where('album_user.userId', '=', asUuid(options.sharedAlbumUserId!))
+            .where('album.deletedAt', 'is', null),
+        ),
+      ),
+    )
     .$if(!!options.encodedVideoPath, (qb) =>
       qb
         .innerJoin('asset_file', (join) =>

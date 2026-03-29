@@ -149,6 +149,15 @@
 
   onMount(() => {
     syncAssetViewerOpenClass(true);
+
+    const cursorChangeUnsubscribe = eventManager.on({
+      AssetUpdate: (updatedAsset) => {
+        if (updatedAsset.id === asset.id) {
+          cursor.current = updatedAsset;
+        }
+      },
+    })
+
     const slideshowStateUnsubscribe = slideshowState.subscribe((value) => {
       if (value === SlideshowState.PlaySlideshow) {
         slideshowHistory.reset();
@@ -167,6 +176,7 @@
     });
 
     return () => {
+      cursorChangeUnsubscribe();
       slideshowStateUnsubscribe();
       slideshowNavigationUnsubscribe();
     };

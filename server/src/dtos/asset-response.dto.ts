@@ -276,7 +276,7 @@ export function mapAsset(entity: MaybeDehydrated<MapAsset>, options: AssetMapOpt
     fileModifiedAt: asDateString(entity.fileModifiedAt),
     localDateTime: asDateString(entity.localDateTime),
     updatedAt: asDateString(entity.updatedAt),
-    isFavorite: options.auth?.user.id === entity.ownerId && entity.isFavorite,
+    isFavorite: entity.isFavorite,
     isArchived: entity.visibility === AssetVisibility.Archive,
     isTrashed: !!entity.deletedAt,
     visibility: entity.visibility,

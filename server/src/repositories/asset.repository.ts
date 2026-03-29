@@ -84,6 +84,8 @@ interface AssetBuilderOptions {
   visibility?: AssetVisibility;
   withCoordinates?: boolean;
   bbox?: BoundingBox;
+  /** Include assets from shared albums where this user is a member */
+  sharedAlbumUserId?: string;
 }
 
 export interface TimeBucketOptions extends AssetBuilderOptions {
@@ -730,7 +732,38 @@ export class AssetRepository {
               )
               .where((eb) => eb.or([eb('asset.stackId', 'is', null), eb(eb.table('stack'), 'is not', null)])),
           )
-          .$if(!!options.userIds, (qb) => qb.where('asset.ownerId', '=', anyUuid(options.userIds!)))
+          .$if(!!options.userIds && !options.sharedAlbumUserId, (qb) =>
+            qb.where('asset.ownerId', '=', anyUuid(options.userIds!)),
+          )
+          .$if(!!options.userIds && !!options.sharedAlbumUserId, (qb) =>
+            qb.where((eb) =>
+              eb.or([
+                eb('asset.ownerId', '=', anyUuid(options.userIds!)),
+                eb.exists(
+                  eb
+                    .selectFrom('album_asset')
+                    .innerJoin('album', 'album.id', 'album_asset.albumId')
+                    .innerJoin('album_user', 'album_user.albumId', 'album.id')
+                    .whereRef('album_asset.assetId', '=', 'asset.id')
+                    .where('album_user.userId', '=', asUuid(options.sharedAlbumUserId!))
+                    .where('album.deletedAt', 'is', null),
+                ),
+              ]),
+            ),
+          )
+          .$if(!options.userIds && !!options.sharedAlbumUserId, (qb) =>
+            qb.where((eb) =>
+              eb.exists(
+                eb
+                  .selectFrom('album_asset')
+                  .innerJoin('album', 'album.id', 'album_asset.albumId')
+                  .innerJoin('album_user', 'album_user.albumId', 'album.id')
+                  .whereRef('album_asset.assetId', '=', 'asset.id')
+                  .where('album_user.userId', '=', asUuid(options.sharedAlbumUserId!))
+                  .where('album.deletedAt', 'is', null),
+              ),
+            ),
+          )
           .$if(options.isFavorite !== undefined, (qb) => qb.where('asset.isFavorite', '=', options.isFavorite!))
           .$if(!!options.assetType, (qb) => qb.where('asset.type', '=', options.assetType!))
           .$if(options.isDuplicate !== undefined, (qb) =>
@@ -760,7 +793,7 @@ export class AssetRepository {
             'asset.duration',
             'asset.id',
             'asset.visibility',
-            sql`asset."isFavorite" and asset."ownerId" = ${auth.user.id}`.as('isFavorite'),
+            sql`asset."isFavorite"`.as('isFavorite'),
             sql`asset.type = 'IMAGE'`.as('isImage'),
             sql`asset."deletedAt" is not null`.as('isTrashed'),
             'asset.livePhotoVideoId',
@@ -814,7 +847,38 @@ export class AssetRepository {
             ),
           )
           .$if(!!options.personId, (qb) => hasPeople(qb, [options.personId!]))
-          .$if(!!options.userIds, (qb) => qb.where('asset.ownerId', '=', anyUuid(options.userIds!)))
+          .$if(!!options.userIds && !options.sharedAlbumUserId, (qb) =>
+            qb.where('asset.ownerId', '=', anyUuid(options.userIds!)),
+          )
+          .$if(!!options.userIds && !!options.sharedAlbumUserId, (qb) =>
+            qb.where((eb) =>
+              eb.or([
+                eb('asset.ownerId', '=', anyUuid(options.userIds!)),
+                eb.exists(
+                  eb
+                    .selectFrom('album_asset')
+                    .innerJoin('album', 'album.id', 'album_asset.albumId')
+                    .innerJoin('album_user', 'album_user.albumId', 'album.id')
+                    .whereRef('album_asset.assetId', '=', 'asset.id')
+                    .where('album_user.userId', '=', asUuid(options.sharedAlbumUserId!))
+                    .where('album.deletedAt', 'is', null),
+                ),
+              ]),
+            ),
+          )
+          .$if(!options.userIds && !!options.sharedAlbumUserId, (qb) =>
+            qb.where((eb) =>
+              eb.exists(
+                eb
+                  .selectFrom('album_asset')
+                  .innerJoin('album', 'album.id', 'album_asset.albumId')
+                  .innerJoin('album_user', 'album_user.albumId', 'album.id')
+                  .whereRef('album_asset.assetId', '=', 'asset.id')
+                  .where('album_user.userId', '=', asUuid(options.sharedAlbumUserId!))
+                  .where('album.deletedAt', 'is', null),
+                ),
+            ),
+          )
           .$if(options.isFavorite !== undefined, (qb) => qb.where('asset.isFavorite', '=', options.isFavorite!))
           .$if(!!options.withStacked, (qb) =>
             qb
@@ -890,7 +954,7 @@ export class AssetRepository {
   }
 
   @GenerateSql({ params: [DummyValue.UUID, { minAssetsPerField: 5, maxFields: 12 }] })
-  async getAssetIdByCity(ownerId: string, { minAssetsPerField, maxFields }: AssetExploreFieldOptions) {
+  async getAssetIdByCity(ownerId: string, { minAssetsPerField, maxFields }: AssetExploreFieldOptions, sharedAlbumUserId?: string) {
     const items = await this.db
       .with('cities', (qb) =>
         qb
@@ -906,7 +970,23 @@ export class AssetRepository {
       .distinctOn('asset_exif.city')
       .select(['assetId as data', 'asset_exif.city as value'])
       .$narrowType<{ value: NotNull }>()
-      .where('ownerId', '=', asUuid(ownerId))
+      .$if(!sharedAlbumUserId, (qb) => qb.where('ownerId', '=', asUuid(ownerId)))
+      .$if(!!sharedAlbumUserId, (qb) =>
+        qb.where((eb) =>
+          eb.or([
+            eb('ownerId' as any, '=', asUuid(ownerId)),
+            eb.exists(
+              eb
+                .selectFrom('album_asset')
+                .innerJoin('album', 'album.id', 'album_asset.albumId')
+                .innerJoin('album_user', 'album_user.albumId', 'album.id')
+                .whereRef('album_asset.assetId', '=', 'asset.id')
+                .where('album_user.userId', '=', asUuid(sharedAlbumUserId!))
+                .where('album.deletedAt', 'is', null),
+            ),
+          ]),
+        ),
+      )
       .where('visibility', '=', AssetVisibility.Timeline)
       .where('type', '=', AssetType.Image)
       .where('deletedAt', 'is', null)

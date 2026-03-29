@@ -68,6 +68,7 @@ export class PersonService extends BaseService {
       minimumFaceCount: machineLearning.facialRecognition.minFaces,
       withHidden,
       closestFaceAssetId,
+      withSharedAlbumPersons: true,
     });
     const { total, hidden } = await this.personRepository.getNumberOfPeople(auth.user.id);
 
@@ -487,7 +488,7 @@ export class PersonService extends BaseService {
     }
 
     const matches = await this.searchRepository.searchFaces({
-      userIds: [face.asset.ownerId],
+      userIds: [],
       embedding: face.faceSearch.embedding,
       maxDistance: machineLearning.facialRecognition.maxDistance,
       numResults: machineLearning.facialRecognition.minFaces,
@@ -514,7 +515,7 @@ export class PersonService extends BaseService {
     let personId = matches.find((match) => match.personId)?.personId;
     if (!personId) {
       const matchWithPerson = await this.searchRepository.searchFaces({
-        userIds: [face.asset.ownerId],
+        userIds: [],
         embedding: face.faceSearch.embedding,
         maxDistance: machineLearning.facialRecognition.maxDistance,
         numResults: 1,

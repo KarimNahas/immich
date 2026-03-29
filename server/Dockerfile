@@ -23,6 +23,7 @@ RUN --mount=type=cache,id=pnpm-server,target=/buildcache/pnpm-store \
 
 FROM builder AS web
 
+ENV NODE_OPTIONS="--max-old-space-size=4096"
 WORKDIR /usr/src/app
 COPY ./web ./web/
 COPY ./i18n ./i18n/

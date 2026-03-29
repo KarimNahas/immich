@@ -22,7 +22,7 @@ import { upsertTags } from 'src/utils/tag';
 @Injectable()
 export class TagService extends BaseService {
   async getAll(auth: AuthDto) {
-    const tags = await this.tagRepository.getAll(auth.user.id);
+    const tags = await this.tagRepository.getAll();
     return tags.map((tag) => mapTag(tag));
   }
 
@@ -44,7 +44,7 @@ export class TagService extends BaseService {
 
     const userId = auth.user.id;
     const value = parent ? `${parent.value}/${dto.name}` : dto.name;
-    const duplicate = await this.tagRepository.getByValue(userId, value);
+    const duplicate = await this.tagRepository.getByValue(value);
     if (duplicate) {
       throw new BadRequestException(`A tag with that name already exists`);
     }

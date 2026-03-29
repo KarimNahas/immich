@@ -26,12 +26,14 @@
   import { getGlobalActions } from '$lib/services/app.service';
   import { getAssetActions } from '$lib/services/asset.service';
   import { user } from '$lib/stores/user.store';
-  import { getSharedLink, withoutIcons } from '$lib/utils';
+  import { getSharedLink, handlePromiseError, withoutIcons } from '$lib/utils';
   import type { OnUndoDelete } from '$lib/utils/actions';
   import { toTimelineAsset } from '$lib/utils/timeline-util';
   import {
+    AlbumUserRole,
     AssetTypeEnum,
     AssetVisibility,
+    getAllAlbums,
     type AlbumResponseDto,
     type AssetResponseDto,
     type PersonResponseDto,
@@ -83,6 +85,28 @@
 
   const isOwner = $derived($user && asset.ownerId === $user?.id);
   const isAlbumOwner = $derived($user && album?.ownerId === $user?.id);
+  let resolvedAlbums: AlbumResponseDto[] = $state([]);
+
+  $effect(() => {
+    if (album || !$user) return;
+    const assetId = asset.id;
+    handlePromiseError(
+      getAllAlbums({ assetId }).then((albums) => {
+        resolvedAlbums = albums;
+      }),
+    );
+  });
+
+  const isEditorInAlbums = (albums: AlbumResponseDto[]) =>
+    albums.some(
+      (a) => a.albumUsers?.some((au) => au.user.id === $user?.id && au.role === AlbumUserRole.Editor) ?? false,
+    );
+
+  const canEdit = $derived(
+    isOwner ||
+    (album ? isEditorInAlbums([album]) : false) ||
+    isEditorInAlbums(resolvedAlbums),
+  );
   const isLocked = $derived(asset.visibility === AssetVisibility.Locked);
   const smartSearchEnabled = $derived(featureFlagsManager.value.smartSearch);
 
@@ -133,13 +157,13 @@
     <ActionButton action={Actions.Favorite} />
     <ActionButton action={Actions.Unfavorite} />
 
-    {#if isOwner}
+    {#if canEdit}
       <RatingAction {asset} {onAction} />
     {/if}
 
     <ActionButton action={Actions.Edit} />
 
-    {#if isOwner}
+    {#if canEdit}
       <DeleteAction {asset} {onAction} {preAction} {onUndoDelete} />
     {/if}
 
@@ -161,7 +185,7 @@
           <RemoveFromAlbumAction {album} onRemove={onRemoveFromAlbum} assetIds={[asset.id]} menuItem />
         {/if}
 
-        {#if isOwner}
+        {#if canEdit}
           <AddToStackAction {asset} {stack} {onAction} />
           {#if stack}
             <UnstackAction {stack} {onAction} />
@@ -185,7 +209,7 @@
         {/if}
 
         {#if !isLocked}
-          {#if isOwner}
+          {#if canEdit}
             <ArchiveAction {asset} {onAction} {preAction} />
             {#if !asset.isArchived && !asset.isTrashed}
               <MenuOption
@@ -204,7 +228,7 @@
           {/if}
         {/if}
 
-        {#if !asset.isTrashed && isOwner}
+        {#if !asset.isTrashed && canEdit}
           <SetVisibilityAction asset={toTimelineAsset(asset)} {onAction} {preAction} />
         {/if}
 
@@ -215,7 +239,7 @@
             text={playOriginalVideo ? $t('play_transcoded_video') : $t('play_original_video')}
           />
         {/if}
-        {#if isOwner}
+        {#if canEdit}
           <hr />
           <ActionMenuItem action={Actions.RefreshFacesJob} />
           <ActionMenuItem action={Actions.RefreshMetadataJob} />

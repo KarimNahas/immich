@@ -12,10 +12,10 @@
 
   interface Props {
     asset: AssetResponseDto;
-    isOwner: boolean;
+    canEdit: boolean;
   }
 
-  let { asset = $bindable(), isOwner }: Props = $props();
+  let { asset = $bindable(), canEdit }: Props = $props();
 
   let tags = $derived(asset.tags || []);
 
@@ -37,7 +37,7 @@
 
 <OnEvents {onAssetsTag} />
 
-{#if isOwner && !authManager.isSharedLink}
+{#if !authManager.isSharedLink}
   <section class="px-4 mt-4">
     <div class="flex h-10 w-full items-center justify-between text-sm">
       <Text color="muted">{$t('tags')}</Text>
@@ -51,17 +51,21 @@
           >
             {tag.value}
           </Link>
-          <IconButton
-            aria-label={$t('remove_tag')}
-            icon={mdiClose}
-            onclick={() => handleRemove(tag.id)}
-            size="tiny"
-            class="hover:bg-primary-400"
-            shape="round"
-          />
+          {#if canEdit}
+            <IconButton
+              aria-label={$t('remove_tag')}
+              icon={mdiClose}
+              onclick={() => handleRemove(tag.id)}
+              size="tiny"
+              class="hover:bg-primary-400"
+              shape="round"
+            />
+          {/if}
         </Badge>
       {/each}
-      <HeaderActionButton action={Tag} />
+      {#if canEdit}
+        <HeaderActionButton action={Tag} />
+      {/if}
     </section>
   </section>
 {/if}

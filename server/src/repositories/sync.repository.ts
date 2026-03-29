@@ -424,7 +424,6 @@ class PersonSync extends BaseSync {
   getDeletes(options: SyncQueryOptions) {
     return this.auditQuery('person_audit', options)
       .select(['id', 'personId'])
-      .where('ownerId', '=', options.userId)
       .stream();
   }
 
@@ -448,7 +447,6 @@ class PersonSync extends BaseSync {
         'updateId',
         'faceAssetId',
       ])
-      .where('ownerId', '=', options.userId)
       .stream();
   }
 }

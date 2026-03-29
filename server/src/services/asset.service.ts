@@ -100,7 +100,7 @@ export class AssetService extends BaseService {
       delete data.owner;
     }
 
-    if (data.ownerId !== auth.user.id || auth.sharedLink) {
+    if (auth.sharedLink) {
       data.people = [];
     }
 
