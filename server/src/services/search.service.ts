@@ -48,7 +48,7 @@ export class SearchService extends BaseService {
   async getExploreData(auth: AuthDto) {
     const options = { maxFields: 12, minAssetsPerField: 5 };
 
-    const cities = await this.assetRepository.getAssetIdByCity(auth.user.id, options);
+    const cities = await this.assetRepository.getAssetIdByCity(auth.user.id, options, auth.user.id);
     const cityAssets = await this.assetRepository.getByIdsWithAllRelationsButStacks(
       cities.items.map(({ data }) => data),
       auth.user.id,
@@ -105,6 +105,7 @@ export class SearchService extends BaseService {
         checksum,
         visibility: dto.visibility ?? (auth.session?.hasElevatedPermission ? undefined : 'not-locked'),
         userIds,
+        sharedAlbumUserId: userIds ? auth.user.id : undefined,
         viewingUserId: auth.user.id,
         orderDirection: dto.order ?? AssetOrder.Desc,
       },
@@ -127,6 +128,7 @@ export class SearchService extends BaseService {
       ...dto,
       visibility: dto.visibility ?? (auth.session?.hasElevatedPermission ? undefined : 'not-locked'),
       userIds,
+      sharedAlbumUserId: auth.user.id,
       viewingUserId: auth.user.id,
     });
   }
@@ -145,6 +147,7 @@ export class SearchService extends BaseService {
       ...dto,
       visibility: dto.visibility ?? (auth.session?.hasElevatedPermission ? undefined : 'not-locked'),
       userIds,
+      sharedAlbumUserId: auth.user.id,
       viewingUserId: auth.user.id,
     });
     return items.map((item) => mapAsset(item, { auth }));
@@ -160,6 +163,7 @@ export class SearchService extends BaseService {
       ...dto,
       visibility: dto.visibility ?? (auth.session?.hasElevatedPermission ? undefined : 'not-locked'),
       userIds,
+      sharedAlbumUserId: auth.user.id,
       viewingUserId: auth.user.id,
     });
     return items.map((item) => mapAsset(item, { auth }));
@@ -188,6 +192,7 @@ export class SearchService extends BaseService {
       {
         ...dto,
         userIds: await userIds,
+        sharedAlbumUserId: auth.user.id,
         viewingUserId: auth.user.id,
         embedding,
         visibility: dto.visibility ?? (auth.session?.hasElevatedPermission ? undefined : 'not-locked'),
@@ -199,38 +204,42 @@ export class SearchService extends BaseService {
 
   async getAssetsByCity(auth: AuthDto): Promise<AssetResponseDto[]> {
     const userIds = await this.getUserIdsToSearch(auth);
-    const assets = await this.searchRepository.getAssetsByCity(userIds);
+    const assets = await this.searchRepository.getAssetsByCity(userIds, auth.user.id);
     return assets.map((asset) => mapAsset(asset));
   }
 
   async getSearchSuggestions(auth: AuthDto, dto: SearchSuggestionRequestDto) {
     const userIds = await this.getUserIdsToSearch(auth);
-    const suggestions = await this.getSuggestions(userIds, dto);
+    const suggestions = await this.getSuggestions(userIds, auth.user.id, dto);
     if (dto.includeNull) {
       suggestions.push(null);
     }
     return suggestions;
   }
 
-  private getSuggestions(userIds: string[], dto: SearchSuggestionRequestDto): Promise<Array<string | null>> {
+  private getSuggestions(
+    userIds: string[],
+    sharedAlbumUserId: string | undefined,
+    dto: SearchSuggestionRequestDto,
+  ): Promise<Array<string | null>> {
     switch (dto.type) {
       case SearchSuggestionType.COUNTRY: {
-        return this.searchRepository.getCountries(userIds);
+        return this.searchRepository.getCountries(userIds, sharedAlbumUserId);
       }
       case SearchSuggestionType.STATE: {
-        return this.searchRepository.getStates(userIds, dto);
+        return this.searchRepository.getStates(userIds, sharedAlbumUserId, dto);
       }
       case SearchSuggestionType.CITY: {
-        return this.searchRepository.getCities(userIds, dto);
+        return this.searchRepository.getCities(userIds, sharedAlbumUserId, dto);
       }
       case SearchSuggestionType.CAMERA_MAKE: {
-        return this.searchRepository.getCameraMakes(userIds, dto);
+        return this.searchRepository.getCameraMakes(userIds, sharedAlbumUserId, dto);
       }
       case SearchSuggestionType.CAMERA_MODEL: {
-        return this.searchRepository.getCameraModels(userIds, dto);
+        return this.searchRepository.getCameraModels(userIds, sharedAlbumUserId, dto);
       }
       case SearchSuggestionType.CAMERA_LENS_MODEL: {
-        return this.searchRepository.getCameraLensModels(userIds, dto);
+        return this.searchRepository.getCameraLensModels(userIds, sharedAlbumUserId, dto);
       }
       default: {
         return Promise.resolve([]);

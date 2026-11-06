@@ -41,7 +41,10 @@ export class TimelineService extends BaseService {
       }
     }
 
-    return { ...options, userIds };
+    // Include assets from shared albums in the user's timeline
+    const sharedAlbumUserId = userId === auth.user.id ? auth.user.id : undefined;
+
+    return { ...options, userIds, sharedAlbumUserId };
   }
 
   private async timeBucketChecks(auth: AuthDto, dto: TimeBucketDto) {
