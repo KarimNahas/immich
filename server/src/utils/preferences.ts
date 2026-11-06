@@ -21,7 +21,7 @@ const getDefaultPreferences = (): UserPreferences => {
     },
     people: {
       enabled: true,
-      sidebarWeb: false,
+      sidebarWeb: true,
       minimumFaces: 3,
       updateStrategy: PersonUpdateStrategy.Everyone,
     },
@@ -33,8 +33,8 @@ const getDefaultPreferences = (): UserPreferences => {
       enabled: false,
     },
     tags: {
-      enabled: false,
-      sidebarWeb: false,
+      enabled: true,
+      sidebarWeb: true,
     },
     emailNotifications: {
       enabled: true,

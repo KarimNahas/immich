@@ -35,8 +35,8 @@ const defaultMapSettings = {
   allowDarkMode: true,
   includeArchived: false,
   onlyFavorites: false,
-  withPartners: false,
-  withSharedAlbums: false,
+  withPartners: true,
+  withSharedAlbums: true,
   showAssetPanel: false,
   relativeDate: '',
 };
