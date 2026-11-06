@@ -1,0 +1,56 @@
+# Tests and checks the fork fails ON PURPOSE. scripts/verify.py reads this file.
+# A failure listed here is intended; any other failure is a regression until proven otherwise.
+# Format: <kind> | <file> | <full test name or note>
+#
+#   unit, medium, web   an upstream test the fork breaks on purpose
+#   env                 a test that fails because of this machine, not the code
+#                       library.service sidecar tests read files from the e2e/test-assets submodule, which is not checked out
+#   tsc                 a file allowed to have type errors
+#   skip                database spec files not run on this machine
+#
+# Which behaviour breaks what (see fork/*.md):
+#   search.service.spec    shared-album-timeline: suggestions, places and smart search also pass the viewer's id
+#   tag.service.spec       global-tags: no per-user lookup, other users' tags are readable and usable
+#   timeline.service.spec  shared-album-timeline: the viewer's own timeline passes sharedAlbumUserId
+#                          shared-favorites: "should return false for favorite status unless asset owner"
+
+tsc | test/medium/specs/services/tag.service.spec.ts | old getByValue(userId, value) call signature
+skip | test/medium/specs/exif/** | needs the e2e/test-assets submodule and ffprobe
+skip | test/medium/specs/workflow/** | needs the workflow plugins built
+skip | test/medium/specs/repositories/storage.repository.spec.ts | assumes a case-sensitive filesystem
+env | test/medium/specs/services/library.service.spec.ts | LibraryService handleSyncAssets should not queue sidecar checks for unchanged assets
+env | test/medium/specs/services/library.service.spec.ts | LibraryService handleSyncAssets should queue sidecar checks for assets whose file changed
+env | test/medium/specs/services/library.service.spec.ts | LibraryService handleSyncFiles should queue sidecar checks for newly imported assets
+
+unit | src/services/search.service.spec.ts | SearchService getSearchSuggestions should return search suggestions for camera lens model
+unit | src/services/search.service.spec.ts | SearchService getSearchSuggestions should return search suggestions for camera lens model (including null)
+unit | src/services/search.service.spec.ts | SearchService getSearchSuggestions should return search suggestions for camera make
+unit | src/services/search.service.spec.ts | SearchService getSearchSuggestions should return search suggestions for camera make (including null)
+unit | src/services/search.service.spec.ts | SearchService getSearchSuggestions should return search suggestions for camera model
+unit | src/services/search.service.spec.ts | SearchService getSearchSuggestions should return search suggestions for camera model (including null)
+unit | src/services/search.service.spec.ts | SearchService getSearchSuggestions should return search suggestions for city
+unit | src/services/search.service.spec.ts | SearchService getSearchSuggestions should return search suggestions for city (including null)
+unit | src/services/search.service.spec.ts | SearchService getSearchSuggestions should return search suggestions for country
+unit | src/services/search.service.spec.ts | SearchService getSearchSuggestions should return search suggestions for country (including null)
+unit | src/services/search.service.spec.ts | SearchService getSearchSuggestions should return search suggestions for state
+unit | src/services/search.service.spec.ts | SearchService getSearchSuggestions should return search suggestions for state (including null)
+unit | src/services/search.service.spec.ts | SearchService searchSmart should work
+unit | src/services/tag.service.spec.ts | TagService create should throw an error for a duplicate tag
+unit | src/services/tag.service.spec.ts | TagService getAll should return all tags for a user
+unit | src/services/tag.service.spec.ts | TagService remove should throw an error for an invalid id
+unit | src/services/timeline.service.spec.ts | TimelineService getTimeBucket should check permissions to read tag
+unit | src/services/timeline.service.spec.ts | TimelineService getTimeBucket should include partner shared assets
+unit | src/services/timeline.service.spec.ts | TimelineService getTimeBuckets should pass bbox options to repository when all bbox fields are provided
+unit | src/services/timeline.service.spec.ts | TimelineService getTimeBuckets should return buckets if userId and albumId aren't set
+medium | test/medium/specs/services/tag.service.spec.ts | TagService addAssets should lock exif column
+medium | test/medium/specs/services/tag.service.spec.ts | TagService addAssets should not add assets to a tag of another user
+medium | test/medium/specs/services/tag.service.spec.ts | TagService deleteEmptyTags hierarchical tag exists, and neither parent nor child is connected to an asset, and both are deleted
+medium | test/medium/specs/services/tag.service.spec.ts | TagService deleteEmptyTags hierarchical tag exists, and only the child is connected to an asset, and nothing is deleted
+medium | test/medium/specs/services/tag.service.spec.ts | TagService deleteEmptyTags hierarchical tag exists, and the parent is connected to an asset, and the child is deleted
+medium | test/medium/specs/services/tag.service.spec.ts | TagService deleteEmptyTags single tag exists, connected to one asset, and is not deleted
+medium | test/medium/specs/services/tag.service.spec.ts | TagService deleteEmptyTags single tag exists, not connected to any assets, and is deleted
+medium | test/medium/specs/services/tag.service.spec.ts | TagService get should not return a tag of another user
+medium | test/medium/specs/services/tag.service.spec.ts | TagService remove should not remove a tag of another user
+medium | test/medium/specs/services/tag.service.spec.ts | TagService removeAssets should not remove assets from a tag of another user
+medium | test/medium/specs/services/tag.service.spec.ts | TagService update should not update a tag of another user
+medium | test/medium/specs/services/timeline.service.spec.ts | TimelineService getTimeBucket should return false for favorite status unless asset owner
