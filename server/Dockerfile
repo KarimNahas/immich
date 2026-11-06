@@ -46,6 +46,7 @@ FROM sdk AS web
 COPY ./web/package.json ./web/package.json
 RUN --mount=type=cache,id=pnpm,target=/buildcache/pnpm-store pnpm --filter immich-web install --frozen-lockfile
 
+ENV NODE_OPTIONS="--max-old-space-size=4096"
 COPY ./i18n ./i18n/
 COPY ./web ./web/
 
