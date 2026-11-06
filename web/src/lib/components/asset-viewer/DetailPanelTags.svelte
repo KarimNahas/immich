@@ -36,7 +36,7 @@
 
 <OnEvents {onAssetsTag} />
 
-{#if isOwner && !authManager.isSharedLink}
+{#if !authManager.isSharedLink}
   <section class="mt-4 px-4">
     <div class="flex h-10 w-full items-center justify-between text-sm">
       <Text color="muted">{$t('tags')}</Text>
@@ -44,7 +44,7 @@
     <section class="flex flex-wrap gap-1 pt-2" data-testid="detail-panel-tags">
       {#each tags as tag (tag.id)}
         <Badge
-          onClose={() => handleRemove(tag.id)}
+          onClose={isOwner ? () => handleRemove(tag.id) : undefined}
           size="small"
           shape="round"
           translations={{ close: $t('remove_tag') }}
@@ -54,7 +54,9 @@
           </Link>
         </Badge>
       {/each}
-      <HeaderActionButton action={Tag} />
+      {#if isOwner}
+        <HeaderActionButton action={Tag} />
+      {/if}
     </section>
   </section>
 {/if}

@@ -315,11 +315,11 @@ const checkOtherAccess = async (access: AccessRepository, request: OtherAccessRe
       return access.notification.checkOwnerAccess(auth.user.id, ids);
     }
 
-    case Permission.TagAsset:
     case Permission.TagRead:
     case Permission.TagUpdate:
-    case Permission.TagDelete: {
-      return await access.tag.checkOwnerAccess(auth.user.id, ids);
+    case Permission.TagDelete:
+    case Permission.TagAsset: {
+      return ids; // Global tags: all tags accessible to all users
     }
 
     case Permission.TimelineRead: {
