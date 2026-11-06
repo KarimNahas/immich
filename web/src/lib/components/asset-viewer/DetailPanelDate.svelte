@@ -1,5 +1,4 @@
 <script lang="ts">
-  import { authManager } from '$lib/managers/auth-manager.svelte';
   import AssetChangeDateModal from '$lib/modals/AssetChangeDateModal.svelte';
   import { locale } from '$lib/stores/preferences.store';
   import { fromISODateTime, fromISODateTimeUTC, toTimelineAsset } from '$lib/utils/timeline-util';
@@ -10,9 +9,10 @@
 
   type Props = {
     asset: AssetResponseDto;
+    isOwner: boolean;
   };
 
-  const { asset }: Props = $props();
+  const { asset, isOwner }: Props = $props();
 
   const timeZone = $derived(asset.exifInfo?.timeZone ?? undefined);
   const dateTime = $derived(
@@ -20,7 +20,6 @@
       ? fromISODateTime(asset.exifInfo.dateTimeOriginal, timeZone)
       : fromISODateTimeUTC(asset.localDateTime),
   );
-  const isOwner = $derived(authManager.authenticated && asset.ownerId === authManager.user.id);
 
   const handleChangeDate = async () => {
     if (!isOwner) {

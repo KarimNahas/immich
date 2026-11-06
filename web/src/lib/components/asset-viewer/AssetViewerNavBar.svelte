@@ -12,15 +12,16 @@
   import { languageManager } from '$lib/managers/language-manager.svelte';
   import { getAlbumAssetActions } from '$lib/services/album.service';
   import { getGlobalActions } from '$lib/services/app.service';
-  import { getAssetActions } from '$lib/services/asset.service';
+  import { getAssetActions, isAlbumEditor } from '$lib/services/asset.service';
   import { getPersonAssetActions } from '$lib/services/person.service';
   import { getStackActions } from '$lib/services/stack.service';
-  import { getSharedLink, withoutIcons } from '$lib/utils';
+  import { getSharedLink, handlePromiseError, withoutIcons } from '$lib/utils';
   import type { OnUndoDelete } from '$lib/utils/actions';
   import { toTimelineAsset } from '$lib/utils/timeline-util';
   import {
     AssetTypeEnum,
     AssetVisibility,
+    getAllAlbums,
     type AlbumResponseDto,
     type AssetResponseDto,
     type PersonResponseDto,
@@ -58,6 +59,25 @@
 
   const isOwner = $derived(authManager.authenticated && asset.ownerId === authManager.user.id);
   const isLocked = $derived(asset.visibility === AssetVisibility.Locked);
+
+  // outside of an album view, look up the asset's albums to see whether the user is an editor of one of them
+  let assetAlbums: AlbumResponseDto[] = $state([]);
+  $effect(() => {
+    assetAlbums = [];
+    if (!authManager.authenticated || authManager.isSharedLink || album || isOwner) {
+      return;
+    }
+    const assetId = asset.id;
+    handlePromiseError(
+      getAllAlbums({ assetId }).then((albums) => {
+        if (assetId === asset.id) {
+          assetAlbums = albums;
+        }
+      }),
+    );
+  });
+  // the asset owner and editors of an album containing the asset can edit it
+  const canEdit = $derived(isOwner || isAlbumEditor(album ? [album] : assetAlbums));
 
   const { Cast } = $derived(getGlobalActions($t));
 
@@ -117,7 +137,7 @@
     <ActionButton action={Actions.Unfavorite} />
     <ActionButton action={Actions.Edit} />
 
-    {#if isOwner}
+    {#if canEdit}
       <DeleteAction {asset} {onAction} {preAction} {onUndoDelete} />
     {/if}
 
@@ -152,19 +172,19 @@
 
         <ActionMenuItem action={Actions.SetProfilePicture} />
 
-        {#if isOwner && !isLocked}
+        {#if canEdit && !isLocked}
           <ArchiveAction {asset} {onAction} {preAction} />
         {/if}
         <ActionMenuItem action={Actions.ViewInTimeline} />
         <ActionMenuItem action={Actions.ViewSimilar} />
 
-        {#if !asset.isTrashed && isOwner}
+        {#if !asset.isTrashed && canEdit}
           <SetVisibilityAction asset={toTimelineAsset(asset)} {onAction} {preAction} />
         {/if}
 
         <ActionMenuItem action={PlayOriginalVideo} />
 
-        {#if isOwner}
+        {#if canEdit}
           <hr />
           <ActionMenuItem action={Actions.RefreshFacesJob} />
           <ActionMenuItem action={Actions.RefreshMetadataJob} />

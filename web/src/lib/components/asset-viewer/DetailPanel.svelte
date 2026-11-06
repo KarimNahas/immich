@@ -10,6 +10,7 @@
   import { authManager } from '$lib/managers/auth-manager.svelte';
   import { featureFlagsManager } from '$lib/managers/feature-flags-manager.svelte';
   import { Route } from '$lib/route';
+  import { isAlbumEditor } from '$lib/services/asset.service';
   import { locale } from '$lib/stores/preferences.store';
   import { getAssetMediaUrl } from '$lib/utils';
   import { delay, getDimensions } from '$lib/utils/asset-utils';
@@ -70,6 +71,19 @@
   };
 
   let albums = $derived(refreshAlbums());
+
+  // the asset owner and editors of an album containing the asset can edit its metadata
+  let resolvedAlbums: AlbumResponseDto[] = $state([]);
+  $effect(() => {
+    const pending = albums;
+    resolvedAlbums = [];
+    void pending.then((result) => {
+      if (pending === albums) {
+        resolvedAlbums = result;
+      }
+    });
+  });
+  let canEdit = $derived(isOwner || isAlbumEditor(currentAlbum ? [currentAlbum, ...resolvedAlbums] : resolvedAlbums));
 
   $effect(() => {
     if (!previousId) {
@@ -150,8 +164,8 @@
       </section>
     {/if}
 
-    <DetailPanelDescription {asset} {isOwner} />
-    <DetailPanelRating {asset} {isOwner} />
+    <DetailPanelDescription {asset} isOwner={canEdit} />
+    <DetailPanelRating {asset} isOwner={canEdit} />
     <DetailPanelPeople {asset} {isOwner} {previousRoute} />
 
     <div class="p-4">
@@ -163,7 +177,7 @@
         <Text size="small" color="muted">{$t('no_exif_info_available')}</Text>
       {/if}
 
-      <DetailPanelDate {asset} />
+      <DetailPanelDate {asset} isOwner={canEdit} />
 
       <div class="flex gap-4 py-4">
         <div><Icon icon={mdiImageOutline} size="24" /></div>
@@ -171,7 +185,7 @@
         <div>
           <p class="flex place-items-center gap-2 break-all whitespace-pre-wrap">
             {asset.originalFileName}
-            {#if isOwner}
+            {#if canEdit}
               <IconButton
                 icon={mdiInformationOutline}
                 aria-label={$t('show_file_location')}
@@ -274,7 +288,7 @@
         </div>
       {/if}
 
-      <DetailPanelLocation {isOwner} {asset} />
+      <DetailPanelLocation isOwner={canEdit} {asset} />
     </div>
   </section>
 
@@ -377,7 +391,7 @@
 
   {#if authManager.authenticated && authManager.preferences.tags.enabled}
     <section class="relative px-2 pb-12 dark:bg-immich-dark-bg dark:text-immich-dark-fg">
-      <DetailPanelTags {asset} {isOwner} />
+      <DetailPanelTags {asset} isOwner={canEdit} />
     </section>
   {/if}
 {/if}

@@ -1,4 +1,5 @@
 import {
+  AlbumUserRole,
   AssetJobName,
   AssetMediaSize,
   AssetTypeEnum,
@@ -139,6 +140,13 @@ export const getAssetBulkActions = ($t: MessageFormatter, album?: AlbumResponseD
     TranscodeVideoJob,
   };
 };
+
+/** Whether the current user is an editor of at least one of the given albums */
+export const isAlbumEditor = (albums: AlbumResponseDto[]) =>
+  authManager.authenticated &&
+  albums.some((album) =>
+    album.albumUsers.some(({ user, role }) => user.id === authManager.user.id && role === AlbumUserRole.Editor),
+  );
 
 export const getAssetActions = (
   $t: MessageFormatter,
@@ -301,7 +309,6 @@ export const getAssetActions = (
     icon: mdiTune,
     $if: () =>
       !sharedLink &&
-      isOwner &&
       asset.type === AssetTypeEnum.Image &&
       !asset.livePhotoVideoId &&
       asset.exifInfo?.projectionType !== ProjectionType.EQUIRECTANGULAR &&
